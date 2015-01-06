@@ -6,7 +6,9 @@ bl_info = {
     "location": "View3D > Tool shelf > Slideshow (Tab)",
     "description": "Inspired by a CG Cookie Tutorial, this addon creates cameras and sequences for a slideshow. It uses the 'images as planes' addon for adding pictures.",
     #"warning": "",
-    #"wiki_url": "",
+    "wiki_url": "https://github.com/hapit/blender_addon_dynamic_slideshow/wiki/Documentation",
+    'tracker_url': 'https://github.com/hapit/blender_addon_dynamic_slideshow/issues',
+    'support': 'COMMUNITY',
     "category": "Animation"}
 
 
@@ -134,13 +136,35 @@ class InitSceneOperator(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
     
     def execute(self, context):
+        bpy.context.scene.cursor_location = (0.0, 0.0, 0.0)
         bpy.context.scene.render.engine = 'BLENDER_RENDER'
-        set_3d_viewport_shade('WIREFRAME')
+        
+        bpy.context.space_data.viewport_shade = 'SOLID'
         bpy.context.scene.game_settings.material_mode = 'GLSL'
+        bpy.context.space_data.show_textured_solid = True
+        
+        # N-Panel Screen Preview/Render
         bpy.context.scene.render.use_sequencer_gl_preview = True
-        bpy.context.scene.render.sequencer_gl_preview = 'TEXTURED'
+        bpy.context.scene.render.sequencer_gl_preview = 'SOLID'
+        bpy.context.scene.render.use_sequencer_gl_textured_solid = True
         
         return {'FINISHED'}
+
+
+class AddCameraOperator(bpy.types.Operator):
+    """Add Camera"""
+    
+    bl_idname = "dyn_slideshow.add_cameras"
+    bl_label = "Add Camera"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    def execute(self, context):
+        bpy.ops.object.camera_add(location=(0,0,2),rotation=(0,0,0))
+        return {'FINISHED'}
+    
+    @classmethod
+    def poll(cls, context):
+        return len(get_sorted_scene_cameras_list()) == 0
 
 
 class InitCamerasOperator(bpy.types.Operator):
@@ -210,8 +234,6 @@ class InitCamerasOperator(bpy.types.Operator):
                 else:
                     print('ERROR: type is '+mesh_obj.type)
             
-            # 
-            set_3d_viewport_shade('TEXTURED')
                     
         else:
             msg = 'Please add and position camera in scene.'
@@ -374,6 +396,8 @@ class DynamicSlideshowPanel(bpy.types.Panel):
         else:
             layout.label("Activate 'Images as Planes'")
         
+        layout.operator(AddCameraOperator.bl_idname, 'Add camera')
+        
         layout.operator(InitCamerasOperator.bl_idname, 'Duplicate cameras')
         
         box = layout.box()
@@ -394,7 +418,7 @@ class DynamicSlideshowPanel(bpy.types.Panel):
 class DynSlideshowPref(bpy.types.AddonPreferences):
     bl_idname = __name__
     
-    draw_type_handling = bpy.props.BoolProperty(name='Advanced draw type handling', default=False, description='')
+    draw_type_handling = bpy.props.BoolProperty(name='(Experimental) Advanced draw type handling', default=False, description='Only displays acive planes as textured.')
     
     def draw(self, context):
         layout = self.layout
