@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Dynamic Slideshow",
     "author": "Philipp (Hapit) Hemmer",
-    "version": (0, 3),
+    "version": (0, 4),
     "blender": (2, 72, 0),
     "location": "View3D > Tool shelf > Slideshow (Tab)",
     "description": "Addon for creating dynamic slideshows. Inspired by a CG Cookie Tutorial, this addon creates cameras and sequences for a slideshow. It uses the 'images as planes' addon for adding pictures.",
@@ -125,12 +125,7 @@ def get_next_camera():
     return current_cam
 
 def is_draw_type_handling():
-    if __name__ == "__main__":
-        return True
-    user_preferences = bpy.context.user_preferences
-    addon_prefs = user_preferences.addons[__name__].preferences
-
-    return addon_prefs.draw_type_handling
+    return True
 
 def move_action_on_x(action, x_movement):
     for fcurve in action.fcurves:
@@ -211,149 +206,148 @@ class AddCameraOperator(bpy.types.Operator):
     def poll(cls, context):
         return is_camera_count_zero()
 
-
-class InitCamerasOperator(bpy.types.Operator):
-    """Init Cameras"""
-    bl_idname = "dyn_slideshow.init_cameras"
-    bl_label = "Init Cameras"
-    bl_options = {'REGISTER', 'UNDO'}
+def execute_init_cameras(self, context):
+    cameraCount = 0
+    cameraObj = None
+    for obj in bpy.context.scene.objects:
+        if obj.type == 'CAMERA':
+            cameraCount += 1
+            cameraObj = obj
     
-    def execute(self, context):
-        cameraCount = 0
-        cameraObj = None
+    if cameraCount == 1:
+        select_single_object(cameraObj)
+        bpy.context.scene.camera = cameraObj
+        
+        # list of all meshes in scene
+        scene_meshes = []
         for obj in bpy.context.scene.objects:
-            if obj.type == 'CAMERA':
-                cameraCount += 1
-                cameraObj = obj
+            if obj.type == 'MESH':
+                scene_meshes.append(obj)
         
-        if cameraCount == 1:
-            select_single_object(cameraObj)
-            bpy.context.scene.camera = cameraObj
-            
-            # list of all meshes in scene
-            scene_meshes = []
-            for obj in bpy.context.scene.objects:
-                if obj.type == 'MESH':
-                    scene_meshes.append(obj)
-            
-            # get image_plane under camera
-            camera_image_mesh = None
-            for mesh_obj in scene_meshes:
-                if mesh_obj.type == 'MESH':
-                    if camera_image_mesh == None:
-                        camera_image_mesh = mesh_obj
-                    elif get_distance(cameraObj, mesh_obj) < get_distance(cameraObj, camera_image_mesh):
-                        camera_image_mesh = mesh_obj
-                        
-            scene_meshes.sort(key=lambda mesh: mesh.location.x)
-            if is_draw_type_handling():
-                camera_image_mesh.draw_type = 'TEXTURED'
-            
-            last_mesh = camera_image_mesh
-            for mesh_obj in scene_meshes:
-                if mesh_obj.type == 'MESH':
-                    if mesh_obj == camera_image_mesh:
-                        print('image_plane already has first camera: '+str(mesh_obj))
-                        cameraObj['picture_mesh'] = camera_image_mesh.name
-                    else:
-                        camera_offset_x = mesh_obj.location.x - last_mesh.location.x
-                        camera_offset_y = mesh_obj.location.y - last_mesh.location.y
-                        
-                        bpy.ops.object.duplicate_move(OBJECT_OT_duplicate = {"linked":False})
-                        newObj = bpy.context.active_object
-                        
-                        newObj.delta_location[0] += camera_offset_x
-                        newObj.delta_location[1] += camera_offset_y
-                        
-                        newObj['picture_mesh'] = mesh_obj.name
-                        
-                        last_mesh = mesh_obj
-                        
-                else:
-                    print('ERROR: type is '+mesh_obj.type)
-            
+        # get image_plane under camera
+        camera_image_mesh = None
+        for mesh_obj in scene_meshes:
+            if mesh_obj.type == 'MESH':
+                if camera_image_mesh == None:
+                    camera_image_mesh = mesh_obj
+                elif get_distance(cameraObj, mesh_obj) < get_distance(cameraObj, camera_image_mesh):
+                    camera_image_mesh = mesh_obj
                     
-        else:
-            msg = 'Please add and position camera in scene.'
-            if cameraCount > 1:
-                msg = 'More than one camera in scene.'
-            self.report({'ERROR'}, msg)
-            return {'CANCELLED'}
+        scene_meshes.sort(key=lambda mesh: mesh.location.x)
+        if is_draw_type_handling():
+            camera_image_mesh.draw_type = 'TEXTURED'
         
-        return {'FINISHED'}
+        last_mesh = camera_image_mesh
+        for mesh_obj in scene_meshes:
+            if mesh_obj.type == 'MESH':
+                if mesh_obj == camera_image_mesh:
+                    print('image_plane already has first camera: '+str(mesh_obj))
+                    cameraObj['picture_mesh'] = camera_image_mesh.name
+                else:
+                    camera_offset_x = mesh_obj.location.x - last_mesh.location.x
+                    camera_offset_y = mesh_obj.location.y - last_mesh.location.y
+                    
+                    bpy.ops.object.duplicate_move(OBJECT_OT_duplicate = {"linked":False})
+                    newObj = bpy.context.active_object
+                    
+                    newObj.delta_location[0] += camera_offset_x
+                    newObj.delta_location[1] += camera_offset_y
+                    
+                    newObj['picture_mesh'] = mesh_obj.name
+                    
+                    last_mesh = mesh_obj
+                    
+            else:
+                print('ERROR: type is '+mesh_obj.type)
+        
+                
+    else:
+        msg = 'Please add and position camera in scene.'
+        if cameraCount > 1:
+            msg = 'More than one camera in scene.'
+        self.report({'ERROR'}, msg)
+        return False
+    
+    return True
 
-
-class InitSequencesOperator(bpy.types.Operator):
-    """Init Sequences"""
-    bl_idname = "dyn_slideshow.init_sequences"
-    bl_label = "Init Sequences"
-    bl_options = {'REGISTER', 'UNDO'}
+def execute_init_sequences(self, context):
+    wm = context.window_manager
     
     scene_sequence_name = 'scene'
     effect_sequence_name = 'effect'
     effect_type = 'CROSS' # 'CROSS' or ‘GAMMA_CROSS’ or ‘WIPE’
     
+    # variables
+    channel_toggle = True
+    channel_a = get_first_free_vse_channel()
+    channel_b = channel_a + 1
+    effect_channel = channel_b + 1
+    seq_channel = channel_a
+    sequence_index = 0
+    effect_index = 0
+    effect_count_on_seq = 1
+    last_sequence = None
+    
+    # create sequences for each camera
+    bpy.context.scene.sequence_editor_create()
+    
+    scene_cameras = get_sorted_scene_cameras_list()
+    scene_cameras.sort(key=lambda camera: camera.location[0]+camera.delta_location[0])
+    
+    # resize scene length
+    bpy.context.scene.frame_end = len(scene_cameras)*wm.ds_sequence_length + (len(scene_cameras)-1)*wm.ds_effect_length
+    
+    for camera in scene_cameras:
+        if sequence_index > 0:
+            effect_index = sequence_index-1
+        seq_start_frame = wm.ds_start_frame + sequence_index*wm.ds_sequence_length + effect_index*wm.ds_effect_length
+        
+        # toggle sequence channel
+        if channel_toggle:
+            seq_channel = channel_a
+        else:
+            seq_channel = channel_b
+        channel_toggle = not channel_toggle
+        
+        new_sequence = bpy.context.scene.sequence_editor.sequences.new_scene(name=scene_sequence_name+'_'+str(camera.name), scene=bpy.context.scene, channel=seq_channel, frame_start=seq_start_frame)
+        new_sequence.frame_final_duration = wm.ds_sequence_length + effect_count_on_seq * wm.ds_effect_length
+        
+        # set offset in strip
+        seqDuration = new_sequence.frame_final_duration
+        new_sequence.animation_offset_start = seq_start_frame
+        new_sequence.frame_final_duration = seqDuration
+        
+        # move animation to strip frames
+        if camera.animation_data != None:
+            move_action_on_x(camera.animation_data.action, seq_start_frame)
+        
+        new_sequence.scene_camera = camera
+
+        if last_sequence != None:
+            new_effect_sequence = bpy.context.scene.sequence_editor.sequences.new_effect(name=effect_sequence_name, type = effect_type, channel=effect_channel, frame_start=seq_start_frame, frame_end=seq_start_frame + wm.ds_effect_length, seq1=last_sequence, seq2=new_sequence)
+        
+        sequence_index = sequence_index+1
+        effect_index = effect_index+1
+        effect_count_on_seq = 2
+        last_sequence = new_sequence
+
+    new_sequence.frame_final_end = new_sequence.frame_final_end - wm.ds_effect_length
+    
+    return True
+
+class SetupSlideshowOperator(bpy.types.Operator):
+    """Setup Slideshow"""
+    bl_idname = "dyn_slideshow.setup_slideshow"
+    bl_label = "Setup Slideshow"
+    bl_options = {'REGISTER', 'UNDO'}
+    
     def execute(self, context):
-        wm = context.window_manager
-        
-        # variables
-        channel_toggle = True
-        channel_a = get_first_free_vse_channel()
-        channel_b = channel_a + 1
-        effect_channel = channel_b + 1
-        seq_channel = channel_a
-        sequence_index = 0
-        effect_index = 0
-        effect_count_on_seq = 1
-        last_sequence = None
-        
-        # create sequences for each camera
-        bpy.context.scene.sequence_editor_create()
-        
-        scene_cameras = get_sorted_scene_cameras_list()
-        scene_cameras.sort(key=lambda camera: camera.location[0]+camera.delta_location[0])
-        
-        # resize scene length
-        bpy.context.scene.frame_end = len(scene_cameras)*wm.ds_sequence_length + (len(scene_cameras)-1)*wm.ds_effect_length
-        
-        for camera in scene_cameras:
-            if sequence_index > 0:
-                effect_index = sequence_index-1
-            seq_start_frame = wm.ds_start_frame + sequence_index*wm.ds_sequence_length + effect_index*wm.ds_effect_length
-            
-            # toggle sequence channel
-            if channel_toggle:
-                seq_channel = channel_a
-            else:
-                seq_channel = channel_b
-            channel_toggle = not channel_toggle
-            
-            new_sequence = bpy.context.scene.sequence_editor.sequences.new_scene(name=self.scene_sequence_name+'_'+str(camera.name), scene=bpy.context.scene, channel=seq_channel, frame_start=seq_start_frame)
-            new_sequence.frame_final_duration = wm.ds_sequence_length + effect_count_on_seq * wm.ds_effect_length
-            
-            # set offset in strip
-            seqDuration = new_sequence.frame_final_duration
-            new_sequence.animation_offset_start = seq_start_frame
-            new_sequence.frame_final_duration = seqDuration
-            
-            # move animation to strip frames
-            if camera.animation_data != None:
-                move_action_on_x(camera.animation_data.action, seq_start_frame)
-            
-            new_sequence.scene_camera = camera
-
-            if last_sequence != None:
-                new_effect_sequence = bpy.context.scene.sequence_editor.sequences.new_effect(name=self.effect_sequence_name, type = self.effect_type, channel=effect_channel, frame_start=seq_start_frame, frame_end=seq_start_frame + wm.ds_effect_length, seq1=last_sequence, seq2=new_sequence)
-            
-            sequence_index = sequence_index+1
-            effect_index = effect_index+1
-            effect_count_on_seq = 2
-            last_sequence = new_sequence
-
-        new_sequence.frame_final_end = new_sequence.frame_final_end - wm.ds_effect_length
-        
-        return {'FINISHED'}
-
+        result1 = execute_init_cameras(self, context)
+        result2 = execute_init_sequences(self, context)
+        if result1 and result2:
+            return {'FINISHED'}
+        else:
+            return {'CANCELLED'}
 
 class ActivateSecuenceCameraOperator(bpy.types.Operator):
     """Acivate sequence camera"""
@@ -362,6 +356,8 @@ class ActivateSecuenceCameraOperator(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
     
     def execute(self, context):
+        wm = context.window_manager
+        
         se = bpy.context.scene.sequence_editor
         print(se)
         if se == None:
@@ -369,12 +365,13 @@ class ActivateSecuenceCameraOperator(bpy.types.Operator):
         act_seq = se.active_strip
         print(act_seq)
         if act_seq.type == 'SCENE':
-            if is_draw_type_handling():
-                bpy.data.objects[bpy.context.scene.camera['picture_mesh']].draw_type = 'WIRE'
+#            if is_draw_type_handling():
+#                bpy.data.objects[bpy.context.scene.camera['picture_mesh']].draw_type = 'WIRE'
             bpy.context.scene.camera = act_seq.scene_camera
             select_single_object(bpy.context.scene.camera)
-            if is_draw_type_handling():
-                bpy.data.objects[act_seq.scene_camera['picture_mesh']].draw_type = 'TEXTURED'
+#            if is_draw_type_handling():
+#                bpy.data.objects[act_seq.scene_camera['picture_mesh']].draw_type = 'TEXTURED'
+            bpy.context.scene.frame_current = act_seq.frame_start+wm.ds_effect_length
         return {'FINISHED'}
     
     @classmethod
@@ -455,13 +452,11 @@ class DynamicSlideshowPanel(bpy.types.Panel):
         
         layout.operator(AddCameraOperator.bl_idname, 'Add camera')
         
-        layout.operator(InitCamerasOperator.bl_idname, 'Duplicate cameras')
-        
         box = layout.box()
         box.prop(wm, 'ds_start_frame', text="Start frame")
         box.prop(wm, 'ds_sequence_length', text="Length")
         box.prop(wm, 'ds_effect_length', text="Effect length")
-        box.operator(InitSequencesOperator.bl_idname, 'Create sequences')
+        box.operator(SetupSlideshowOperator.bl_idname, 'Setup slideshow')
         
         layout.label('Camera navigation:')
         layout.operator(ActivateSecuenceCameraOperator.bl_idname, 'Activate camera from active sequence')
@@ -469,18 +464,6 @@ class DynamicSlideshowPanel(bpy.types.Panel):
         col = layout.row(align=True)
         col.operator(ActivatePreviousCameraOperator.bl_idname, 'Previous')
         col.operator(ActivateNextCameraOperator.bl_idname, 'Next')
-
-# Addon Preferences
-
-class DynSlideshowPref(bpy.types.AddonPreferences):
-    bl_idname = __name__
-    
-    draw_type_handling = bpy.props.BoolProperty(name='Advanced draw type handling for performance with many images.', default=True, description='Only displays acive planes as textured.')
-    
-    def draw(self, context):
-        layout = self.layout
-        layout.prop(self, "draw_type_handling")
-
 
 def register():
     bpy.utils.register_module(__name__)
