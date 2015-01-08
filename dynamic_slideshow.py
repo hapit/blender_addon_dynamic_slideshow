@@ -4,7 +4,7 @@ bl_info = {
     "version": (0, 3),
     "blender": (2, 72, 0),
     "location": "View3D > Tool shelf > Slideshow (Tab)",
-    "description": "Inspired by a CG Cookie Tutorial, this addon creates cameras and sequences for a slideshow. It uses the 'images as planes' addon for adding pictures.",
+    "description": "Addon for creating dynamic slideshows. Inspired by a CG Cookie Tutorial, this addon creates cameras and sequences for a slideshow. It uses the 'images as planes' addon for adding pictures.",
     #"warning": "",
     "wiki_url": "https://github.com/hapit/blender_addon_dynamic_slideshow/wiki/Documentation",
     'tracker_url': 'https://github.com/hapit/blender_addon_dynamic_slideshow/issues',
@@ -16,7 +16,7 @@ import bpy
 from math import sqrt
 from bpy.props import *
 from bpy.app.handlers import persistent
-
+from mathutils import Vector
 
 ################### Functions
 
@@ -62,7 +62,7 @@ def get_sequences_for_frame():
     seq_list = []
     for seq in bpy.context.scene.sequence_editor.sequences:
         cur_frame = bpy.context.scene.frame_current
-        if seq.frame_start <= cur_frame and seq.frame_start+seq.frame_final_duration >= cur_frame and seq.type == 'SCENE':
+        if seq.frame_final_start <= cur_frame and seq.frame_final_end >= cur_frame and seq.type == 'SCENE':
             seq_list.append(seq)
     return seq_list
 
@@ -72,20 +72,34 @@ def get_sorted_scene_cameras_list():
     for obj in bpy.context.scene.objects:
         if obj.type == 'CAMERA':
             scene_cameras.append(obj)
-    scene_cameras.sort(key=lambda cam: cam.location.x)
+    scene_cameras.sort(key=lambda cam: cam.location.x+cam.delta_location.x)
     return scene_cameras
 
+def is_camera_count_zero():
+    for obj in bpy.context.scene.objects:
+        if obj.type == 'CAMERA':
+            return False
+    return True
+
+def has_multiple_cameras():
+    cam_count = 0
+    for obj in bpy.context.scene.objects:
+        if obj.type == 'CAMERA':
+            cam_count += 1
+            if cam_count > 1:
+                return True
+    return False
+
 def has_camera_navigation():
-    cameras = get_sorted_scene_cameras_list()
-    if len(cameras) < 2:
+    if not has_multiple_cameras():
         return False
     else:
-        for cam in cameras:
+        for cam in get_sorted_scene_cameras_list():
             if cam['picture_mesh'] == None or cam['picture_mesh'] == '':
                 return False
     return True
     
-def get_next_camera():
+def get_prev_camera():
     cameras = get_sorted_scene_cameras_list()
     current_cam = bpy.context.scene.camera
     last_cam = None
@@ -99,7 +113,7 @@ def get_next_camera():
             last_cam = cam
     return current_cam
 
-def get_prev_camera():
+def get_next_camera():
     cameras = get_sorted_scene_cameras_list()
     current_cam = bpy.context.scene.camera
     cam_found = False
@@ -118,13 +132,31 @@ def is_draw_type_handling():
 
     return addon_prefs.draw_type_handling
 
+def move_action_on_x(action, x_movement):
+    for fcurve in action.fcurves:
+        for point in fcurve.keyframe_points:
+            point.co.x += x_movement
+            point.handle_left.x += x_movement
+            point.handle_right.x += x_movement
+
+def has_sequence():
+    se = bpy.context.scene.sequence_editor
+    if se == None:
+        return False
+    if len(se.sequences) == 0:
+        return False
+    return True
+
+def select_single_object(obj):
+    bpy.ops.object.select_all(action='DESELECT')
+    obj.select = True
+    bpy.context.scene.objects.active = obj
 
 @persistent
 def frame_change_handler(scene):
-    if is_draw_type_handling():
+    if is_draw_type_handling() and has_sequence():
         set_all_mesh_draw_type('WIRE')
         for seq in get_sequences_for_frame():
-            print(seq.scene_camera['picture_mesh'])
             bpy.data.objects[seq.scene_camera['picture_mesh']].draw_type = 'TEXTURED'
 
 ################### Operators
@@ -139,7 +171,7 @@ class InitSceneOperator(bpy.types.Operator):
         bpy.context.scene.cursor_location = (0.0, 0.0, 0.0)
         bpy.context.scene.render.engine = 'BLENDER_RENDER'
         
-        bpy.context.space_data.viewport_shade = 'SOLID'
+        bpy.context.space_data.viewport_shade = 'WIREFRAME'
         bpy.context.scene.game_settings.material_mode = 'GLSL'
         bpy.context.space_data.show_textured_solid = True
         
@@ -159,12 +191,25 @@ class AddCameraOperator(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
     
     def execute(self, context):
+        wm = context.window_manager
+        
         bpy.ops.object.camera_add(location=(0,0,2),rotation=(0,0,0))
+        
+        if is_draw_type_handling():
+            for mesh_obj in bpy.context.scene.objects:
+                if mesh_obj.type == 'MESH':
+                    for mat_slot in mesh_obj.material_slots:
+                        mat_slot.material.use_shadeless = True
+                    mesh_obj.draw_type = 'WIRE'
+                    if mesh_obj.location == Vector((0.0, 0.0, 0.0)):
+                        mesh_obj.draw_type = 'SOLID'
+        
+        bpy.context.space_data.viewport_shade = 'SOLID'
         return {'FINISHED'}
     
     @classmethod
     def poll(cls, context):
-        return len(get_sorted_scene_cameras_list()) == 0
+        return is_camera_count_zero()
 
 
 class InitCamerasOperator(bpy.types.Operator):
@@ -182,12 +227,7 @@ class InitCamerasOperator(bpy.types.Operator):
                 cameraObj = obj
         
         if cameraCount == 1:
-            # deselect everything
-            bpy.ops.object.select_all(action='DESELECT')
-            
-            # select the camera
-            cameraObj.select = True
-            bpy.context.scene.objects.active = cameraObj
+            select_single_object(cameraObj)
             bpy.context.scene.camera = cameraObj
             
             # list of all meshes in scene
@@ -204,9 +244,7 @@ class InitCamerasOperator(bpy.types.Operator):
                         camera_image_mesh = mesh_obj
                     elif get_distance(cameraObj, mesh_obj) < get_distance(cameraObj, camera_image_mesh):
                         camera_image_mesh = mesh_obj
-                    if is_draw_type_handling():
-                        # default draw_type to 'WIRE'
-                        obj.draw_type = 'WIRE'
+                        
             scene_meshes.sort(key=lambda mesh: mesh.location.x)
             if is_draw_type_handling():
                 camera_image_mesh.draw_type = 'TEXTURED'
@@ -257,6 +295,7 @@ class InitSequencesOperator(bpy.types.Operator):
     
     def execute(self, context):
         wm = context.window_manager
+        
         # variables
         channel_toggle = True
         channel_a = get_first_free_vse_channel()
@@ -272,7 +311,10 @@ class InitSequencesOperator(bpy.types.Operator):
         bpy.context.scene.sequence_editor_create()
         
         scene_cameras = get_sorted_scene_cameras_list()
-        scene_cameras.sort(key=lambda camera: camera.delta_location[0])
+        scene_cameras.sort(key=lambda camera: camera.location[0]+camera.delta_location[0])
+        
+        # resize scene length
+        bpy.context.scene.frame_end = len(scene_cameras)*wm.ds_sequence_length + (len(scene_cameras)-1)*wm.ds_effect_length
         
         for camera in scene_cameras:
             if sequence_index > 0:
@@ -288,6 +330,16 @@ class InitSequencesOperator(bpy.types.Operator):
             
             new_sequence = bpy.context.scene.sequence_editor.sequences.new_scene(name=self.scene_sequence_name+'_'+str(camera.name), scene=bpy.context.scene, channel=seq_channel, frame_start=seq_start_frame)
             new_sequence.frame_final_duration = wm.ds_sequence_length + effect_count_on_seq * wm.ds_effect_length
+            
+            # set offset in strip
+            seqDuration = new_sequence.frame_final_duration
+            new_sequence.animation_offset_start = seq_start_frame
+            new_sequence.frame_final_duration = seqDuration
+            
+            # move animation to strip frames
+            if camera.animation_data != None:
+                move_action_on_x(camera.animation_data.action, seq_start_frame)
+            
             new_sequence.scene_camera = camera
 
             if last_sequence != None:
@@ -300,7 +352,6 @@ class InitSequencesOperator(bpy.types.Operator):
 
         new_sequence.frame_final_end = new_sequence.frame_final_end - wm.ds_effect_length
         
-        bpy.context.scene.frame_end = seq_start_frame + wm.ds_sequence_length + wm.ds_effect_length - 1
         return {'FINISHED'}
 
 
@@ -321,6 +372,7 @@ class ActivateSecuenceCameraOperator(bpy.types.Operator):
             if is_draw_type_handling():
                 bpy.data.objects[bpy.context.scene.camera['picture_mesh']].draw_type = 'WIRE'
             bpy.context.scene.camera = act_seq.scene_camera
+            select_single_object(bpy.context.scene.camera)
             if is_draw_type_handling():
                 bpy.data.objects[act_seq.scene_camera['picture_mesh']].draw_type = 'TEXTURED'
         return {'FINISHED'}
@@ -348,6 +400,8 @@ class ActivateNextCameraOperator(bpy.types.Operator):
         if is_draw_type_handling():
             bpy.data.objects[bpy.context.scene.camera['picture_mesh']].draw_type = 'WIRE'
         bpy.context.scene.camera = get_next_camera()
+        select_single_object(bpy.context.scene.camera)
+        
         if is_draw_type_handling():
             bpy.data.objects[bpy.context.scene.camera['picture_mesh']].draw_type = 'TEXTURED'
         return {'FINISHED'}
@@ -367,7 +421,10 @@ class ActivatePreviousCameraOperator(bpy.types.Operator):
             return {'CANCELLED'}
         if is_draw_type_handling():
             bpy.data.objects[bpy.context.scene.camera['picture_mesh']].draw_type = 'WIRE'
+        #bpy.context.scene.camera.select = False
         bpy.context.scene.camera = get_prev_camera()
+        select_single_object(bpy.context.scene.camera)
+        
         if is_draw_type_handling():
             bpy.data.objects[bpy.context.scene.camera['picture_mesh']].draw_type = 'TEXTURED'
         return {'FINISHED'}
@@ -418,7 +475,7 @@ class DynamicSlideshowPanel(bpy.types.Panel):
 class DynSlideshowPref(bpy.types.AddonPreferences):
     bl_idname = __name__
     
-    draw_type_handling = bpy.props.BoolProperty(name='(Experimental) Advanced draw type handling', default=False, description='Only displays acive planes as textured.')
+    draw_type_handling = bpy.props.BoolProperty(name='Advanced draw type handling for performance with many images.', default=True, description='Only displays acive planes as textured.')
     
     def draw(self, context):
         layout = self.layout
@@ -443,6 +500,7 @@ def unregister():
     try:
         del bpy.types.WindowManager.ds_sequence_length
         del bpy.types.WindowManager.ds_effect_length
+        del bpy.types.WindowManager.ds_start_frame
         
     except:
         pass
