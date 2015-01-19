@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Dynamic Slideshow",
     "author": "Philipp (Hapit) Hemmer",
-    "version": (0, 4),
+    "version": (0, 5),
     "blender": (2, 72, 0),
     "location": "View3D > Tool shelf > Slideshow (Tab)",
     "description": "Addon for creating dynamic slideshows. Inspired by a CG Cookie Tutorial, this addon creates cameras and sequences for a slideshow. It uses the 'images as planes' addon for adding pictures.",
@@ -295,7 +295,7 @@ def execute_init_sequences(self, context):
     scene_cameras.sort(key=lambda camera: camera.location[0]+camera.delta_location[0])
     
     # resize scene length
-    bpy.context.scene.frame_end = len(scene_cameras)*wm.ds_sequence_length + (len(scene_cameras)-1)*wm.ds_effect_length
+    bpy.context.scene.frame_end = wm.ds_start_frame + len(scene_cameras)*wm.ds_sequence_length + (len(scene_cameras)-1)*wm.ds_effect_length
     
     for camera in scene_cameras:
         if sequence_index > 0:
@@ -331,7 +331,7 @@ def execute_init_sequences(self, context):
         effect_count_on_seq = 2
         last_sequence = new_sequence
 
-    new_sequence.frame_final_end = new_sequence.frame_final_end - wm.ds_effect_length
+    new_sequence.frame_final_end = new_sequence.frame_final_end - wm.ds_effect_length + 1
     
     return True
 
