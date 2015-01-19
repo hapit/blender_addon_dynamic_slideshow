@@ -323,7 +323,7 @@ def execute_init_sequences(self, context):
         
         new_sequence.scene_camera = camera
 
-        if last_sequence != None:
+        if last_sequence != None and wm.ds_effect_length > 0:
             new_effect_sequence = bpy.context.scene.sequence_editor.sequences.new_effect(name=effect_sequence_name, type = effect_type, channel=effect_channel, frame_start=seq_start_frame, frame_end=seq_start_frame + wm.ds_effect_length, seq1=last_sequence, seq2=new_sequence)
         
         sequence_index = sequence_index+1
@@ -471,7 +471,7 @@ def register():
     bpy.app.handlers.frame_change_pre.append(frame_change_handler)
     
     bpy.types.WindowManager.ds_sequence_length = IntProperty(min = 1, default = 100, description='Sequence length without effect length')
-    bpy.types.WindowManager.ds_effect_length = IntProperty(min = 1, default = 25, description='Sequence effect length, added to sequence length')
+    bpy.types.WindowManager.ds_effect_length = IntProperty(min = 0, default = 25, description='Sequence effect length, added to sequence length')
     bpy.types.WindowManager.ds_start_frame = IntProperty(min = 1, default = 1, description='Frame the first sequence starts')
 
 
