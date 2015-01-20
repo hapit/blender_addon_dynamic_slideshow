@@ -348,6 +348,10 @@ class SetupSlideshowOperator(bpy.types.Operator):
             return {'FINISHED'}
         else:
             return {'CANCELLED'}
+    
+    @classmethod
+    def poll(cls, context):
+        return not has_sequence()
 
 class ActivateSecuenceCameraOperator(bpy.types.Operator):
     """Acivate sequence camera"""
