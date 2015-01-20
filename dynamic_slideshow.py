@@ -147,6 +147,17 @@ def select_single_object(obj):
     obj.select = True
     bpy.context.scene.objects.active = obj
 
+def set_sequence_active_for_camera(camera):
+    se = bpy.context.scene.sequence_editor
+    if se != None:
+        for seq in se.sequences:
+            if seq.scene_camera == camera:
+                se.active_strip = seq
+                break
+        for area in bpy.context.screen.areas:
+            if area.type == 'SEQUENCE_EDITOR':
+                area.tag_redraw()
+
 @persistent
 def frame_change_handler(scene):
     if is_draw_type_handling() and has_sequence():
@@ -401,7 +412,9 @@ class ActivateNextCameraOperator(bpy.types.Operator):
             return {'CANCELLED'}
         if is_draw_type_handling():
             bpy.data.objects[bpy.context.scene.camera['picture_mesh']].draw_type = 'WIRE'
-        bpy.context.scene.camera = get_next_camera()
+        next_camera = get_next_camera()
+        bpy.context.scene.camera = next_camera
+        set_sequence_active_for_camera(next_camera)
         select_single_object(bpy.context.scene.camera)
         
         if is_draw_type_handling():
@@ -423,8 +436,9 @@ class ActivatePreviousCameraOperator(bpy.types.Operator):
             return {'CANCELLED'}
         if is_draw_type_handling():
             bpy.data.objects[bpy.context.scene.camera['picture_mesh']].draw_type = 'WIRE'
-        #bpy.context.scene.camera.select = False
-        bpy.context.scene.camera = get_prev_camera()
+        prev_camera = get_prev_camera()
+        bpy.context.scene.camera = prev_camera
+        set_sequence_active_for_camera(prev_camera)
         select_single_object(bpy.context.scene.camera)
         
         if is_draw_type_handling():
