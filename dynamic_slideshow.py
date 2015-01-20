@@ -169,6 +169,7 @@ class InitSceneOperator(bpy.types.Operator):
         bpy.context.space_data.viewport_shade = 'WIREFRAME'
         bpy.context.scene.game_settings.material_mode = 'GLSL'
         bpy.context.space_data.show_textured_solid = True
+        bpy.ops.view3d.viewnumpad(type='TOP', align_active=False)
         
         # N-Panel Screen Preview/Render
         bpy.context.scene.render.use_sequencer_gl_preview = True
