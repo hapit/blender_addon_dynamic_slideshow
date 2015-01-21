@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Dynamic Slideshow",
     "author": "Philipp (Hapit) Hemmer",
-    "version": (0, 4),
+    "version": (0, 5),
     "blender": (2, 72, 0),
     "location": "View3D > Tool shelf > Slideshow (Tab)",
     "description": "Addon for creating dynamic slideshows. Inspired by a CG Cookie Tutorial, this addon creates cameras and sequences for a slideshow. It uses the 'images as planes' addon for adding pictures.",
@@ -12,7 +12,7 @@ bl_info = {
     "category": "Animation"}
 
 
-import bpy
+import bpy, urllib.request
 from math import sqrt
 from bpy.props import *
 from bpy.app.handlers import persistent
@@ -147,6 +147,69 @@ def select_single_object(obj):
     obj.select = True
     bpy.context.scene.objects.active = obj
 
+def set_sequence_active_for_camera(camera):
+    se = bpy.context.scene.sequence_editor
+    if se != None:
+        for seq in se.sequences:
+            if seq.scene_camera == camera:
+                se.active_strip = seq
+                break
+        for area in bpy.context.screen.areas:
+            if area.type == 'SEQUENCE_EDITOR':
+                area.tag_redraw()
+
+def compair_version_arrays(vArr1, vArr2):
+    # return -1 if vArr1 is smaller than vArr2
+    # return 0 if both arrays are equal
+    # return 1 if vArr1 is greater than vArr2
+    if len(vArr1) < 2 or len(vArr2) < 2:
+        print('Error in compair_version_arrays')
+        return 0 # error should not happen
+    if vArr1[0] < vArr2[0]:
+        return -1
+    elif vArr1[0] > vArr2[0]:
+        return 1
+    # first version number is equal
+    if vArr1[1] < vArr2[1]:
+        return -1
+    elif vArr1[1] > vArr2[1]:
+        return 1
+    # second version number is equal, check vor third version number
+    if len(vArr1) > 2 and len(vArr2) > 2:
+        if vArr1[2] < vArr2[2]:
+            return -1
+        elif vArr1[2] > vArr2[2]:
+            return 1
+        else:
+            return 0
+    elif len(vArr1) > 2 and len(vArr2) <= 2:
+        return 1
+    elif len(vArr1) <= 2 and len(vArr2) > 2:
+        return -1
+    return 0
+
+def compair_against_online_version():
+    # check_version against online version file
+    # check_version returns True if addon version is equal or higher than the online version
+    try:
+        latestversion = urllib.request.urlopen('https://raw.githubusercontent.com/hapit/blender_addon_dynamic_slideshow/master/version.txt')
+        latestversion = latestversion.readline()
+        latestversion = latestversion.decode("utf-8")
+        
+        latestversionStrArray = latestversion.split('.')
+        latestversionArray = []
+        for str in latestversionStrArray:
+            latestversionArray.append(int(str))
+        
+        return compair_version_arrays(bl_info['version'], latestversionArray)
+    except BaseException as e:
+        print('except' + str(e))
+        return 0
+
+def check_version(operator):
+    if compair_against_online_version() < 0:
+        operator.report({'INFO'}, bl_info['name'] + ' - Newer version available!')
+
 @persistent
 def frame_change_handler(scene):
     if is_draw_type_handling() and has_sequence():
@@ -163,12 +226,14 @@ class InitSceneOperator(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
     
     def execute(self, context):
+        check_version(self)
         bpy.context.scene.cursor_location = (0.0, 0.0, 0.0)
         bpy.context.scene.render.engine = 'BLENDER_RENDER'
         
         bpy.context.space_data.viewport_shade = 'WIREFRAME'
         bpy.context.scene.game_settings.material_mode = 'GLSL'
         bpy.context.space_data.show_textured_solid = True
+        bpy.ops.view3d.viewnumpad(type='TOP', align_active=False)
         
         # N-Panel Screen Preview/Render
         bpy.context.scene.render.use_sequencer_gl_preview = True
@@ -186,6 +251,7 @@ class AddCameraOperator(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
     
     def execute(self, context):
+        check_version(self)
         wm = context.window_manager
         
         bpy.ops.object.camera_add(location=(0,0,2),rotation=(0,0,0))
@@ -207,6 +273,7 @@ class AddCameraOperator(bpy.types.Operator):
         return is_camera_count_zero()
 
 def execute_init_cameras(self, context):
+    check_version(self)
     cameraCount = 0
     cameraObj = None
     for obj in bpy.context.scene.objects:
@@ -234,7 +301,7 @@ def execute_init_cameras(self, context):
                     camera_image_mesh = mesh_obj
                     
         scene_meshes.sort(key=lambda mesh: mesh.location.x)
-        if is_draw_type_handling():
+        if is_draw_type_handling() and camera_image_mesh != None:
             camera_image_mesh.draw_type = 'TEXTURED'
         
         last_mesh = camera_image_mesh
@@ -271,6 +338,7 @@ def execute_init_cameras(self, context):
     return True
 
 def execute_init_sequences(self, context):
+    check_version(self)
     wm = context.window_manager
     
     scene_sequence_name = 'scene'
@@ -295,7 +363,7 @@ def execute_init_sequences(self, context):
     scene_cameras.sort(key=lambda camera: camera.location[0]+camera.delta_location[0])
     
     # resize scene length
-    bpy.context.scene.frame_end = len(scene_cameras)*wm.ds_sequence_length + (len(scene_cameras)-1)*wm.ds_effect_length
+    bpy.context.scene.frame_end = wm.ds_start_frame + len(scene_cameras)*wm.ds_sequence_length + (len(scene_cameras)-1)*wm.ds_effect_length
     
     for camera in scene_cameras:
         if sequence_index > 0:
@@ -323,7 +391,7 @@ def execute_init_sequences(self, context):
         
         new_sequence.scene_camera = camera
 
-        if last_sequence != None:
+        if last_sequence != None and wm.ds_effect_length > 0:
             new_effect_sequence = bpy.context.scene.sequence_editor.sequences.new_effect(name=effect_sequence_name, type = effect_type, channel=effect_channel, frame_start=seq_start_frame, frame_end=seq_start_frame + wm.ds_effect_length, seq1=last_sequence, seq2=new_sequence)
         
         sequence_index = sequence_index+1
@@ -331,7 +399,7 @@ def execute_init_sequences(self, context):
         effect_count_on_seq = 2
         last_sequence = new_sequence
 
-    new_sequence.frame_final_end = new_sequence.frame_final_end - wm.ds_effect_length
+    new_sequence.frame_final_end = new_sequence.frame_final_end - wm.ds_effect_length + 1
     
     return True
 
@@ -348,6 +416,10 @@ class SetupSlideshowOperator(bpy.types.Operator):
             return {'FINISHED'}
         else:
             return {'CANCELLED'}
+    
+    @classmethod
+    def poll(cls, context):
+        return not has_sequence()
 
 class ActivateSecuenceCameraOperator(bpy.types.Operator):
     """Acivate sequence camera"""
@@ -396,7 +468,9 @@ class ActivateNextCameraOperator(bpy.types.Operator):
             return {'CANCELLED'}
         if is_draw_type_handling():
             bpy.data.objects[bpy.context.scene.camera['picture_mesh']].draw_type = 'WIRE'
-        bpy.context.scene.camera = get_next_camera()
+        next_camera = get_next_camera()
+        bpy.context.scene.camera = next_camera
+        set_sequence_active_for_camera(next_camera)
         select_single_object(bpy.context.scene.camera)
         
         if is_draw_type_handling():
@@ -418,8 +492,9 @@ class ActivatePreviousCameraOperator(bpy.types.Operator):
             return {'CANCELLED'}
         if is_draw_type_handling():
             bpy.data.objects[bpy.context.scene.camera['picture_mesh']].draw_type = 'WIRE'
-        #bpy.context.scene.camera.select = False
-        bpy.context.scene.camera = get_prev_camera()
+        prev_camera = get_prev_camera()
+        bpy.context.scene.camera = prev_camera
+        set_sequence_active_for_camera(prev_camera)
         select_single_object(bpy.context.scene.camera)
         
         if is_draw_type_handling():
@@ -471,7 +546,7 @@ def register():
     bpy.app.handlers.frame_change_pre.append(frame_change_handler)
     
     bpy.types.WindowManager.ds_sequence_length = IntProperty(min = 1, default = 100, description='Sequence length without effect length')
-    bpy.types.WindowManager.ds_effect_length = IntProperty(min = 1, default = 25, description='Sequence effect length, added to sequence length')
+    bpy.types.WindowManager.ds_effect_length = IntProperty(min = 0, default = 25, description='Sequence effect length, added to sequence length')
     bpy.types.WindowManager.ds_start_frame = IntProperty(min = 1, default = 1, description='Frame the first sequence starts')
 
 
