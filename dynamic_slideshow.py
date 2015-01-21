@@ -12,7 +12,7 @@ bl_info = {
     "category": "Animation"}
 
 
-import bpy
+import bpy, urllib.request
 from math import sqrt
 from bpy.props import *
 from bpy.app.handlers import persistent
@@ -158,6 +158,58 @@ def set_sequence_active_for_camera(camera):
             if area.type == 'SEQUENCE_EDITOR':
                 area.tag_redraw()
 
+def compair_version_arrays(vArr1, vArr2):
+    # return -1 if vArr1 is smaller than vArr2
+    # return 0 if both arrays are equal
+    # return 1 if vArr1 is greater than vArr2
+    if len(vArr1) < 2 or len(vArr2) < 2:
+        print('Error in compair_version_arrays')
+        return 0 # error should not happen
+    if vArr1[0] < vArr2[0]:
+        return -1
+    elif vArr1[0] > vArr2[0]:
+        return 1
+    # first version number is equal
+    if vArr1[1] < vArr2[1]:
+        return -1
+    elif vArr1[1] > vArr2[1]:
+        return 1
+    # second version number is equal, check vor third version number
+    if len(vArr1) > 2 and len(vArr2) > 2:
+        if vArr1[2] < vArr2[2]:
+            return -1
+        elif vArr1[2] > vArr2[2]:
+            return 1
+        else:
+            return 0
+    elif len(vArr1) > 2 and len(vArr2) <= 2:
+        return 1
+    elif len(vArr1) <= 2 and len(vArr2) > 2:
+        return -1
+    return 0
+
+def compair_against_online_version():
+    # check_version against online version file
+    # check_version returns True if addon version is equal or higher than the online version
+    try:
+        latestversion = urllib.request.urlopen('https://raw.githubusercontent.com/hapit/blender_addon_dynamic_slideshow/master/version.txt')
+        latestversion = latestversion.readline()
+        latestversion = latestversion.decode("utf-8")
+        
+        latestversionStrArray = latestversion.split('.')
+        latestversionArray = []
+        for str in latestversionStrArray:
+            latestversionArray.append(int(str))
+        
+        return compair_version_arrays(bl_info['version'], latestversionArray)
+    except BaseException as e:
+        print('except' + str(e))
+        return 0
+
+def check_version(operator):
+    if compair_against_online_version() < 0:
+        operator.report({'INFO'}, bl_info['name'] + ' - Newer version available!')
+
 @persistent
 def frame_change_handler(scene):
     if is_draw_type_handling() and has_sequence():
@@ -174,6 +226,7 @@ class InitSceneOperator(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
     
     def execute(self, context):
+        check_version(self)
         bpy.context.scene.cursor_location = (0.0, 0.0, 0.0)
         bpy.context.scene.render.engine = 'BLENDER_RENDER'
         
@@ -198,6 +251,7 @@ class AddCameraOperator(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
     
     def execute(self, context):
+        check_version(self)
         wm = context.window_manager
         
         bpy.ops.object.camera_add(location=(0,0,2),rotation=(0,0,0))
@@ -219,6 +273,7 @@ class AddCameraOperator(bpy.types.Operator):
         return is_camera_count_zero()
 
 def execute_init_cameras(self, context):
+    check_version(self)
     cameraCount = 0
     cameraObj = None
     for obj in bpy.context.scene.objects:
@@ -246,7 +301,7 @@ def execute_init_cameras(self, context):
                     camera_image_mesh = mesh_obj
                     
         scene_meshes.sort(key=lambda mesh: mesh.location.x)
-        if is_draw_type_handling():
+        if is_draw_type_handling() and camera_image_mesh != None:
             camera_image_mesh.draw_type = 'TEXTURED'
         
         last_mesh = camera_image_mesh
@@ -283,6 +338,7 @@ def execute_init_cameras(self, context):
     return True
 
 def execute_init_sequences(self, context):
+    check_version(self)
     wm = context.window_manager
     
     scene_sequence_name = 'scene'
