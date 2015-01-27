@@ -527,29 +527,35 @@ class DynamicSlideshowPanel(bpy.types.Panel):
         
         layout.operator(AddCameraOperator.bl_idname, 'Add camera')
         
+        layout.separator()
+        
         box = layout.box()
         box.prop(wm, 'ds_start_frame', text="Start frame")
         box.prop(wm, 'ds_sequence_length', text="Length")
         box.prop(wm, 'ds_effect_length', text="Effect length")
         
-        effect_box = box.box()
-        if wm.ds_expand_effect_settings == False:
-            effect_box.prop(wm, 'ds_expand_effect_settings', icon='TRIA_RIGHT', icon_only=False, text='Effect settings', emboss=False)
-        else:
-            effect_box.prop(wm, 'ds_expand_effect_settings', icon='TRIA_DOWN', icon_only=False, text='Effect settings', emboss=False)
-            
-            effect_box.prop(wm, 'ds_cross_effect', text='Cross')
-            if wm.ds_cross_effect:
-                sb_row = effect_box.row()
-                sb_row.prop(wm, 'ds_cross_type', expand=True)
-            
-            effect_box.prop(wm, 'ds_wipe_single_effect', text='Single - Wipe')
-            effect_box.prop(wm, 'ds_wipe_double_effect', text='Double - Wipe')
-            effect_box.prop(wm, 'ds_wipe_iris_effect', text='Iris - Wipe')
-            effect_box.prop(wm, 'ds_wipe_clock_effect', text='Clock - Wipe')
+        
+        if wm.ds_effect_length > 0:
+            effect_box = box.box()
+            if wm.ds_expand_effect_settings == False:
+                effect_box.prop(wm, 'ds_expand_effect_settings', icon='TRIA_RIGHT', icon_only=False, text='Effect settings', emboss=False)
+            else:
+                effect_box.prop(wm, 'ds_expand_effect_settings', icon='TRIA_DOWN', icon_only=False, text='Effect settings', emboss=False)
+                
+                effect_box.prop(wm, 'ds_cross_effect', text='Cross')
+                if wm.ds_cross_effect:
+                    sb_row = effect_box.row()
+                    sb_row.prop(wm, 'ds_cross_type', expand=True)
+                
+                effect_box.prop(wm, 'ds_wipe_single_effect', text='Single - Wipe')
+                effect_box.prop(wm, 'ds_wipe_double_effect', text='Double - Wipe')
+                effect_box.prop(wm, 'ds_wipe_iris_effect', text='Iris - Wipe')
+                effect_box.prop(wm, 'ds_wipe_clock_effect', text='Clock - Wipe')
             
         
         box.operator(SetupSlideshowOperator.bl_idname, 'Setup slideshow')
+        
+        layout.separator()
         
         layout.label('Camera navigation:')
         layout.operator(ActivateSecuenceCameraOperator.bl_idname, 'Activate camera from active sequence')
