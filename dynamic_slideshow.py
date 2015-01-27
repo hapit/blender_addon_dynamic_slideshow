@@ -337,13 +337,31 @@ def execute_init_cameras(self, context):
     
     return True
 
+def get_effect_type(index):
+    # returns tuple of effect_type 'CROSS' or ‘GAMMA_CROSS’ or ‘WIPE’ and transition for WIPE ('SINGLE', 'DOUBLE', 'IRIS', 'CLOCK')
+    # default is GAMMA_CROSS
+    wm = bpy.context.window_manager
+    
+    if wm.ds_cross_effect:
+        return (wm.ds_cross_type, '')
+    elif wm.ds_wipe_single_effect:
+        return ('WIPE', 'SINGLE')
+    elif wm.ds_wipe_double_effect:
+        return ('WIPE', 'DOUBLE')
+    elif wm.ds_wipe_iris_effect:
+        return ('WIPE', 'IRIS')
+    elif wm.ds_wipe_clock_effect:
+        return ('WIPE', 'CLOCK')
+    else:
+        return ('GAMMA_CROSS', '')
+    
+
 def execute_init_sequences(self, context):
     check_version(self)
     wm = context.window_manager
     
     scene_sequence_name = 'scene'
     effect_sequence_name = 'effect'
-    effect_type = 'CROSS' # 'CROSS' or ‘GAMMA_CROSS’ or ‘WIPE’
     
     # variables
     channel_toggle = True
@@ -392,7 +410,10 @@ def execute_init_sequences(self, context):
         new_sequence.scene_camera = camera
 
         if last_sequence != None and wm.ds_effect_length > 0:
+            effect_type, transition_type = get_effect_type(effect_index)
             new_effect_sequence = bpy.context.scene.sequence_editor.sequences.new_effect(name=effect_sequence_name, type = effect_type, channel=effect_channel, frame_start=seq_start_frame, frame_end=seq_start_frame + wm.ds_effect_length, seq1=last_sequence, seq2=new_sequence)
+            if effect_type == 'WIPE':
+                new_effect_sequence.transition_type = transition_type
         
         sequence_index = sequence_index+1
         effect_index = effect_index+1
@@ -410,7 +431,10 @@ class SetupSlideshowOperator(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
     
     def execute(self, context):
-        result1 = execute_init_cameras(self, context)
+        if not has_multiple_cameras():
+            result1 = execute_init_cameras(self, context)
+        else:
+            result1 = True
         result2 = execute_init_sequences(self, context)
         if result1 and result2:
             return {'FINISHED'}
