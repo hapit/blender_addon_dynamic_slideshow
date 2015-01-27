@@ -531,6 +531,24 @@ class DynamicSlideshowPanel(bpy.types.Panel):
         box.prop(wm, 'ds_start_frame', text="Start frame")
         box.prop(wm, 'ds_sequence_length', text="Length")
         box.prop(wm, 'ds_effect_length', text="Effect length")
+        
+        effect_box = box.box()
+        if wm.ds_expand_effect_settings == False:
+            effect_box.prop(wm, 'ds_expand_effect_settings', icon='TRIA_RIGHT', icon_only=False, text='Effect settings', emboss=False)
+        else:
+            effect_box.prop(wm, 'ds_expand_effect_settings', icon='TRIA_DOWN', icon_only=False, text='Effect settings', emboss=False)
+            
+            effect_box.prop(wm, 'ds_cross_effect', text='Cross')
+            if wm.ds_cross_effect:
+                sb_row = effect_box.row()
+                sb_row.prop(wm, 'ds_cross_type', expand=True)
+            
+            effect_box.prop(wm, 'ds_wipe_single_effect', text='Single - Wipe')
+            effect_box.prop(wm, 'ds_wipe_double_effect', text='Double - Wipe')
+            effect_box.prop(wm, 'ds_wipe_iris_effect', text='Iris - Wipe')
+            effect_box.prop(wm, 'ds_wipe_clock_effect', text='Clock - Wipe')
+            
+        
         box.operator(SetupSlideshowOperator.bl_idname, 'Setup slideshow')
         
         layout.label('Camera navigation:')
@@ -548,7 +566,23 @@ def register():
     bpy.types.WindowManager.ds_sequence_length = IntProperty(min = 1, default = 100, description='Sequence length without effect length')
     bpy.types.WindowManager.ds_effect_length = IntProperty(min = 0, default = 25, description='Sequence effect length, added to sequence length')
     bpy.types.WindowManager.ds_start_frame = IntProperty(min = 1, default = 1, description='Frame the first sequence starts')
-
+    
+    bpy.types.WindowManager.ds_expand_effect_settings = BoolProperty(default=False)
+    
+    bpy.types.WindowManager.ds_cross_effect = BoolProperty(default=True)
+    bpy.types.WindowManager.ds_cross_type = EnumProperty(
+        name="Cross type:",
+        description="Select cross type.",
+        items=(('GAMMA_CROSS', 'Gamma', ''),
+               ('CROSS', 'Normal', '')),
+        default='GAMMA_CROSS',
+        )
+    
+    bpy.types.WindowManager.ds_wipe_single_effect = BoolProperty(default=False)
+    bpy.types.WindowManager.ds_wipe_double_effect = BoolProperty(default=False)
+    bpy.types.WindowManager.ds_wipe_iris_effect = BoolProperty(default=False)
+    bpy.types.WindowManager.ds_wipe_clock_effect = BoolProperty(default=False)
+    
 
 def unregister():
     bpy.utils.unregister_module(__name__)
@@ -559,6 +593,13 @@ def unregister():
         del bpy.types.WindowManager.ds_sequence_length
         del bpy.types.WindowManager.ds_effect_length
         del bpy.types.WindowManager.ds_start_frame
+        del bpy.types.WindowManager.ds_expand_effect_settings
+        del bpy.types.WindowManager.ds_cross_effect
+        del bpy.types.WindowManager.ds_cross_type
+        del bpy.types.WindowManager.ds_wipe_single_effect
+        del bpy.types.WindowManager.ds_wipe_double_effect
+        del bpy.types.WindowManager.ds_wipe_iris_effect
+        del bpy.types.WindowManager.ds_wipe_clock_effect
         
     except:
         pass
