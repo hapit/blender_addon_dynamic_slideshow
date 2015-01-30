@@ -12,11 +12,12 @@ bl_info = {
     "category": "Tools"}
 
 
-import bpy, urllib.request
+import bpy, urllib.request, random
 from math import sqrt
-from bpy.props import *
+from bpy.props import IntProperty, BoolProperty, EnumProperty, FloatProperty, StringProperty, CollectionProperty
 from bpy.app.handlers import persistent
 from mathutils import Vector
+
 
 ################### Functions
 
@@ -210,6 +211,20 @@ def check_version(operator):
     if compair_against_online_version() < 0:
         operator.report({'INFO'}, bl_info['name'] + ' - Newer version available!')
 
+def get_effect_type(index):
+    # retruns EffectCollection item
+    scene = bpy.context.scene
+    wm = bpy.context.window_manager
+    
+    if scene.ds_effect_types != None and len(scene.ds_effect_types) > 0:
+        if wm.ds_effect_add_type == 'RANDOM':
+            return scene.ds_effect_types[random.randrange(0,len(scene.ds_effect_types))]
+        else: # CYCLIC
+            return scene.ds_effect_types[index%len(scene.ds_effect_types)]
+    else:
+        return bpy.context.scene.ds_effect_types.add()
+
+
 @persistent
 def frame_change_handler(scene):
     if is_draw_type_handling() and has_sequence():
@@ -337,24 +352,6 @@ def execute_init_cameras(self, context):
     
     return True
 
-def get_effect_type(index):
-    # returns tuple of effect_type 'CROSS' or ‘GAMMA_CROSS’ or ‘WIPE’ and transition for WIPE ('SINGLE', 'DOUBLE', 'IRIS', 'CLOCK')
-    # default is GAMMA_CROSS
-    wm = bpy.context.window_manager
-    
-    if wm.ds_cross_effect:
-        return (wm.ds_cross_type, '')
-    elif wm.ds_wipe_single_effect:
-        return ('WIPE', 'SINGLE')
-    elif wm.ds_wipe_double_effect:
-        return ('WIPE', 'DOUBLE')
-    elif wm.ds_wipe_iris_effect:
-        return ('WIPE', 'IRIS')
-    elif wm.ds_wipe_clock_effect:
-        return ('WIPE', 'CLOCK')
-    else:
-        return ('GAMMA_CROSS', '')
-    
 
 def execute_init_sequences(self, context):
     check_version(self)
@@ -410,10 +407,17 @@ def execute_init_sequences(self, context):
         new_sequence.scene_camera = camera
 
         if last_sequence != None and wm.ds_effect_length > 0:
-            effect_type, transition_type = get_effect_type(effect_index)
+            effect_item = get_effect_type(effect_index)
+            effect_type = 'GAMMA_CROSS'
+            
+            if effect_item.effect_type == 'CROSS':
+                effect_type = effect_item.cross_type
+            elif effect_item.effect_type == 'WIPE':
+                effect_type = 'WIPE'
+            
             new_effect_sequence = bpy.context.scene.sequence_editor.sequences.new_effect(name=effect_sequence_name, type = effect_type, channel=effect_channel, frame_start=seq_start_frame, frame_end=seq_start_frame + wm.ds_effect_length, seq1=last_sequence, seq2=new_sequence)
             if effect_type == 'WIPE':
-                new_effect_sequence.transition_type = transition_type
+                new_effect_sequence.transition_type = effect_item.wipe_type
         
         sequence_index = sequence_index+1
         effect_index = effect_index+1
@@ -529,10 +533,194 @@ class ActivatePreviousCameraOperator(bpy.types.Operator):
     def poll(cls, context):
         return has_camera_navigation()
 
+class AddEffectTypeOperator(bpy.types.Operator):
+    """Add effect type"""
+    bl_idname = "dyn_slideshow.add_effect_type"
+    bl_label = "Add effect type"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    type = EnumProperty(
+        name="Effect type:",
+        items=(('CROSS', 'Cross', ''),
+               ('WIPE_SINGLE', 'Wipe-Single', ''),
+               ('WIPE_DOUBLE', 'Wipe-Double', ''),
+               ('WIPE_IRIS', 'Wipe-Iris', ''),
+               ('WIPE_CLOCK', 'Wipe-Clock', '')),
+        default='CROSS',
+        )
+    
+    def execute(self, context):
+        new_effect_type = context.scene.ds_effect_types.add()
+        
+        new_name = "Effect"
+        if self.type == 'WIPE_SINGLE':
+            new_effect_type.effect_type = 'WIPE'
+            new_effect_type.wipe_type = 'SINGLE'
+            new_name = "Wipe-Single"
+        elif self.type == 'WIPE_DOUBLE':
+            new_effect_type.effect_type = 'WIPE'
+            new_effect_type.wipe_type = 'DOUBLE'
+            new_name = "Wipe-Double"
+        elif self.type == 'WIPE_IRIS':
+            new_effect_type.effect_type = 'WIPE'
+            new_effect_type.wipe_type = 'IRIS'
+            new_name = "Wipe-Iris"
+        elif self.type == 'WIPE_CLOCK':
+            new_effect_type.effect_type = 'WIPE'
+            new_effect_type.wipe_type = 'CLOCK'
+            new_name = "Wipe-Clock"
+        else:
+            new_effect_type.effect_type = 'CROSS'
+            new_effect_type.cross_type = 'GAMMA_CROSS'
+            new_name = "Cross"
+        
+        counter = 1
+        base_name = new_name
+        while context.scene.ds_effect_types.find(new_name) >= 0:
+            new_name = base_name + " #" + str(counter)
+            counter += 1
+        
+        new_effect_type.name = new_name
+        context.scene.ds_effect_type_index = len(context.scene.ds_effect_types) - 1
+        
+        return {'FINISHED'}
+
+
+class RemoveEffectTypeOperator(bpy.types.Operator):
+    """Remove effect type"""
+    bl_idname = "dyn_slideshow.remove_effect_type"
+    bl_label = "Remove effect type"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    def execute(self, context):
+        context.scene.ds_effect_types.remove(bpy.context.scene.ds_effect_type_index)
+        
+        if context.scene.ds_effect_type_index == len(context.scene.ds_effect_types):
+           context.scene.ds_effect_type_index = len(context.scene.ds_effect_types) - 1
+        
+        return {'FINISHED'}
+
+class MoveEffectTypeOperator(bpy.types.Operator):
+    """Move effect type"""
+    bl_idname = "dyn_slideshow.move_effect_type"
+    bl_label = "Move effect type"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    type = EnumProperty(
+        name="Effect type:",
+        items=(('UP', 'Up', ''),
+               ('DOWN', 'Down', '')),
+        default='UP',
+        )
+    
+    def execute(self, context):
+        old_index = context.scene.ds_effect_type_index
+        new_index = -1
+        
+        if self.type == 'UP':
+            new_index = old_index - 1
+        else:
+            new_index = old_index + 1
+        
+        if new_index > -1 and new_index < len(context.scene.ds_effect_types):
+            context.scene.ds_effect_types.move(old_index, new_index)
+            context.scene.ds_effect_type_index = new_index
+        
+        return {'FINISHED'}
+
+
+class ManualAddEffectsTypeOperator(bpy.types.Operator):
+    """Manual add effects"""
+    bl_idname = "dyn_slideshow.manual_add_effects"
+    bl_label = "Manual add effects"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    def execute(self, context):
+        # TODO
+        
+        return {'FINISHED'}
+
+################ UI code
+
+class SCENE_UL_ds_effect_collection(bpy.types.UIList):
+    
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
+        self.use_filter_show = False
+        ob = data
+        if self.layout_type in {'DEFAULT', 'COMPACT'}:
+            if item:
+                layout.prop(item, "name", text="", emboss=False)
+            else:
+                layout.label(text="", translate=False)
+        elif self.layout_type in {'GRID'}:
+            layout.alignment = 'CENTER'
+            layout.label(text="", icon_value=icon)
+
+class EffectAddMenu(bpy.types.Menu):
+    bl_label = "Effect Add Menu"
+    bl_idname = "dyn_slideshow.effect_add_menu"
+
+    def draw(self, context):
+        layout = self.layout
+
+        layout.operator("dyn_slideshow.add_effect_type", text='Cross').type = 'CROSS'
+        layout.operator("dyn_slideshow.add_effect_type", text='Wipe-Single').type = 'WIPE_SINGLE'
+        layout.operator("dyn_slideshow.add_effect_type", text='Wipe-Double').type = 'WIPE_DOUBLE'
+        layout.operator("dyn_slideshow.add_effect_type", text='Wipe-Iris').type = 'WIPE_IRIS'
+        layout.operator("dyn_slideshow.add_effect_type", text='Wipe-Clock').type = 'WIPE_CLOCK'
+
+class EffectExtraMenu(bpy.types.Menu):
+    bl_label = "Effect Extra Menu"
+    bl_idname = "dyn_slideshow.effect_extra_menu"
+
+    def draw(self, context):
+        layout = self.layout
+
+        layout.operator("dyn_slideshow.manual_add_effects", text='Manual add effects to VSE')
+
+class EffectCollection(bpy.types.PropertyGroup):
+    name = StringProperty(name='effect_name')
+    
+    effect_type = EnumProperty(
+        name="Effect type:",
+        items=(('CROSS', 'Cross', ''),
+               ('WIPE', 'Wipe', '')),
+        default='CROSS',
+        )
+    
+    cross_type = EnumProperty(
+        name="Cross type:",
+        description="Select cross type.",
+        items=(('GAMMA_CROSS', 'Gamma', ''),
+               ('CROSS', 'Normal', '')),
+        default='GAMMA_CROSS',
+        )
+    
+    wipe_type = EnumProperty(
+        name="Wipe type:",
+        description="Select wipe type.",
+        items=(('SINGLE', 'Single', ''),
+               ('DOUBLE', 'Double', ''),
+               ('IRIS', 'Iris', ''),
+               ('CLOCK', 'Clock', '')),
+        default='SINGLE',
+        )
+    
+    direction = EnumProperty(
+        name="Wipe direction:",
+        items=(('OUT', 'Out', ''),
+               ('IN', 'In', '')),
+        default='OUT',
+        )
+    
+    blur = FloatProperty(name='Blur Widht:', min=0.0, max=1.0, default=0.2)
+    
+    angle = FloatProperty(name='Angle:', min=-1.5708, max=1.5708, subtype='ANGLE', unit='ROTATION')
+
 class DynamicSlideshowPanel(bpy.types.Panel):
     """UI panel for the Remesh and Boolean buttons"""
     bl_label = "Dyn. slideshow"
-    bl_idname = "OBJECT_PT_dynamic_slideshow"
+    bl_idname = "TOOLS_dynamic_slideshow"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'TOOLS'
     bl_category = "Slideshow"
@@ -541,11 +729,12 @@ class DynamicSlideshowPanel(bpy.types.Panel):
         layout = self.layout
         edit = context.user_preferences.edit
         wm = context.window_manager
+        scene = context.scene
         
         layout.operator(InitSceneOperator.bl_idname, 'Init scene')
         
         if 'io_import_images_as_planes' in bpy.context.user_preferences.addons.keys():
-            layout.operator("import_image.to_plane", ' Images as Planes', icon='TEXTURE')
+            layout.operator('import_image.to_plane', ' Images as Planes', icon='TEXTURE')
         else:
             layout.label("Activate 'Images as Planes'")
         
@@ -561,21 +750,37 @@ class DynamicSlideshowPanel(bpy.types.Panel):
         
         if wm.ds_effect_length > 0:
             effect_box = box.box()
-            if wm.ds_expand_effect_settings == False:
-                effect_box.prop(wm, 'ds_expand_effect_settings', icon='TRIA_RIGHT', icon_only=False, text='Effect settings', emboss=False)
+            if not wm.ds_expand_effect:
+                effect_box.prop(wm, 'ds_expand_effect', icon='TRIA_RIGHT', icon_only=False, text='Effect settings', emboss=False)
             else:
-                effect_box.prop(wm, 'ds_expand_effect_settings', icon='TRIA_DOWN', icon_only=False, text='Effect settings', emboss=False)
+                effect_box.prop(wm, 'ds_expand_effect', icon='TRIA_DOWN', icon_only=False, text='Effect settings', emboss=False)
                 
-                effect_box.prop(wm, 'ds_cross_effect', text='Cross')
-                if wm.ds_cross_effect:
-                    sb_row = effect_box.row()
-                    sb_row.prop(wm, 'ds_cross_type', expand=True)
+                effect_box.row().prop(wm, "ds_effect_add_type", text="Effect add type", expand=True)
                 
-                effect_box.prop(wm, 'ds_wipe_single_effect', text='Single - Wipe')
-                effect_box.prop(wm, 'ds_wipe_double_effect', text='Double - Wipe')
-                effect_box.prop(wm, 'ds_wipe_iris_effect', text='Iris - Wipe')
-                effect_box.prop(wm, 'ds_wipe_clock_effect', text='Clock - Wipe')
-            
+                row = effect_box.row()
+                col = row.column()
+                
+                # UI_UL_list   SCENE_UL_ds_effect_collection
+                col.template_list("SCENE_UL_ds_effect_collection", "ds_effect_collection", scene, "ds_effect_types", scene, "ds_effect_type_index", rows=3)
+                
+                col = row.column(align=True)
+                col.menu("dyn_slideshow.effect_add_menu", icon='ZOOMIN', text="")
+                col.operator("dyn_slideshow.remove_effect_type", icon='ZOOMOUT', text="")
+                col.separator()
+                
+                col.operator("dyn_slideshow.move_effect_type", icon='TRIA_UP', text="").type = 'UP'
+                col.operator("dyn_slideshow.move_effect_type", icon='TRIA_DOWN', text="").type = 'DOWN'
+                col.separator()
+                
+                col.menu("dyn_slideshow.effect_extra_menu", icon='DOWNARROW_HLT', text="")
+                if len(scene.ds_effect_types) > 0:
+                    selected_effect = scene.ds_effect_types[scene.ds_effect_type_index]
+                    effect_box.prop(selected_effect, "name", text="Name")
+                    effect_box.prop(selected_effect, "effect_type", text="Effect")
+                    if selected_effect.effect_type == 'CROSS':
+                        effect_box.prop(selected_effect, "cross_type", text="Type")
+                    elif selected_effect.effect_type == 'WIPE':
+                        effect_box.prop(selected_effect, "wipe_type", text="Transition")
         
         box.operator(SetupSlideshowOperator.bl_idname, 'Setup slideshow')
         
@@ -587,6 +792,8 @@ class DynamicSlideshowPanel(bpy.types.Panel):
         col = layout.row(align=True)
         col.operator(ActivatePreviousCameraOperator.bl_idname, 'Previous')
         col.operator(ActivateNextCameraOperator.bl_idname, 'Next')
+        
+#################
 
 def register():
     bpy.utils.register_module(__name__)
@@ -597,21 +804,18 @@ def register():
     bpy.types.WindowManager.ds_effect_length = IntProperty(min = 0, default = 25, description='Sequence effect length, added to sequence length')
     bpy.types.WindowManager.ds_start_frame = IntProperty(min = 1, default = 1, description='Frame the first sequence starts')
     
-    bpy.types.WindowManager.ds_expand_effect_settings = BoolProperty(default=False)
+    bpy.types.WindowManager.ds_expand_effect = BoolProperty(default=False)
     
-    bpy.types.WindowManager.ds_cross_effect = BoolProperty(default=True)
-    bpy.types.WindowManager.ds_cross_type = EnumProperty(
-        name="Cross type:",
-        description="Select cross type.",
-        items=(('GAMMA_CROSS', 'Gamma', ''),
-               ('CROSS', 'Normal', '')),
-        default='GAMMA_CROSS',
+    bpy.types.WindowManager.ds_effect_add_type = EnumProperty(
+        name="Effect add type",
+        items=(('CYCLIC', 'Cyclic', ''),
+               ('RANDOM', 'Random', '')),
+        default='CYCLIC',
         )
     
-    bpy.types.WindowManager.ds_wipe_single_effect = BoolProperty(default=False)
-    bpy.types.WindowManager.ds_wipe_double_effect = BoolProperty(default=False)
-    bpy.types.WindowManager.ds_wipe_iris_effect = BoolProperty(default=False)
-    bpy.types.WindowManager.ds_wipe_clock_effect = BoolProperty(default=False)
+    bpy.types.Scene.ds_effect_types = CollectionProperty(type=EffectCollection, name='Effect types:', description='Effect list for adding to VSE.')
+    
+    bpy.types.Scene.ds_effect_type_index = IntProperty(name='ds_effect_type_index')
     
 
 def unregister():
@@ -623,13 +827,10 @@ def unregister():
         del bpy.types.WindowManager.ds_sequence_length
         del bpy.types.WindowManager.ds_effect_length
         del bpy.types.WindowManager.ds_start_frame
-        del bpy.types.WindowManager.ds_expand_effect_settings
-        del bpy.types.WindowManager.ds_cross_effect
-        del bpy.types.WindowManager.ds_cross_type
-        del bpy.types.WindowManager.ds_wipe_single_effect
-        del bpy.types.WindowManager.ds_wipe_double_effect
-        del bpy.types.WindowManager.ds_wipe_iris_effect
-        del bpy.types.WindowManager.ds_wipe_clock_effect
+        del bpy.types.WindowManager.ds_expand_effect
+        del bpy.types.WindowManager.ds_effect_add_type
+        del bpy.types.Scene.ds_effect_types
+        del bpy.types.Scene.ds_effect_type_index
         
     except:
         pass
