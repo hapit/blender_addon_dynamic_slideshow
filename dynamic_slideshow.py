@@ -222,7 +222,9 @@ def get_effect_type(index):
         else: # CYCLIC
             return scene.ds_effect_types[index%len(scene.ds_effect_types)]
     else:
-        return bpy.context.scene.ds_effect_types.add()
+        new_effect = bpy.context.scene.ds_effect_types.add()
+        new_effect.name = "Cross"
+        return new_effect
 
 
 @persistent
@@ -418,6 +420,9 @@ def execute_init_sequences(self, context):
             new_effect_sequence = bpy.context.scene.sequence_editor.sequences.new_effect(name=effect_sequence_name, type = effect_type, channel=effect_channel, frame_start=seq_start_frame, frame_end=seq_start_frame + wm.ds_effect_length, seq1=last_sequence, seq2=new_sequence)
             if effect_type == 'WIPE':
                 new_effect_sequence.transition_type = effect_item.wipe_type
+                new_effect_sequence.direction = effect_item.direction
+                new_effect_sequence.blur_width = effect_item.blur
+                new_effect_sequence.angle = effect_item.angle
         
         sequence_index = sequence_index+1
         effect_index = effect_index+1
@@ -775,12 +780,16 @@ class DynamicSlideshowPanel(bpy.types.Panel):
                 col.menu("dyn_slideshow.effect_extra_menu", icon='DOWNARROW_HLT', text="")
                 if len(scene.ds_effect_types) > 0:
                     selected_effect = scene.ds_effect_types[scene.ds_effect_type_index]
-                    effect_box.prop(selected_effect, "name", text="Name")
                     effect_box.prop(selected_effect, "effect_type", text="Effect")
                     if selected_effect.effect_type == 'CROSS':
                         effect_box.prop(selected_effect, "cross_type", text="Type")
                     elif selected_effect.effect_type == 'WIPE':
                         effect_box.prop(selected_effect, "wipe_type", text="Transition")
+                        effect_box.label("Direction:")
+                        effect_box.row().prop(selected_effect, "direction", text="Direction", expand=True)
+                        effect_box.prop(selected_effect, "blur", text="Blur Width:", slider=True)
+                        if selected_effect.wipe_type == 'SINGLE' or selected_effect.wipe_type == 'DOUBLE':
+                            effect_box.prop(selected_effect, "angle", text="Angle")
         
         box.operator(SetupSlideshowOperator.bl_idname, 'Setup slideshow')
         
