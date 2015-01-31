@@ -226,6 +226,21 @@ def get_effect_type(index):
         new_effect.name = "Cross"
         return new_effect
 
+def add_new_effect(effect_index, effect_channel, seq_start_frame, seq_end_frame, sequence1, sequence2):
+    effect_item = get_effect_type(effect_index)
+    effect_type = 'GAMMA_CROSS'
+    
+    if effect_item.effect_type == 'CROSS':
+        effect_type = effect_item.cross_type
+    elif effect_item.effect_type == 'WIPE':
+        effect_type = 'WIPE'
+    
+    new_effect_sequence = bpy.context.scene.sequence_editor.sequences.new_effect(name=effect_item.name, type = effect_type, channel=effect_channel, frame_start=seq_start_frame, frame_end=seq_end_frame, seq1=sequence1, seq2=sequence2)
+    if effect_type == 'WIPE':
+        new_effect_sequence.transition_type = effect_item.wipe_type
+        new_effect_sequence.direction = effect_item.direction
+        new_effect_sequence.blur_width = effect_item.blur
+        new_effect_sequence.angle = effect_item.angle
 
 @persistent
 def frame_change_handler(scene):
@@ -360,7 +375,6 @@ def execute_init_sequences(self, context):
     wm = context.window_manager
     
     scene_sequence_name = 'scene'
-    effect_sequence_name = 'effect'
     
     # variables
     channel_toggle = True
@@ -409,20 +423,7 @@ def execute_init_sequences(self, context):
         new_sequence.scene_camera = camera
 
         if last_sequence != None and wm.ds_effect_length > 0:
-            effect_item = get_effect_type(effect_index)
-            effect_type = 'GAMMA_CROSS'
-            
-            if effect_item.effect_type == 'CROSS':
-                effect_type = effect_item.cross_type
-            elif effect_item.effect_type == 'WIPE':
-                effect_type = 'WIPE'
-            
-            new_effect_sequence = bpy.context.scene.sequence_editor.sequences.new_effect(name=effect_sequence_name, type = effect_type, channel=effect_channel, frame_start=seq_start_frame, frame_end=seq_start_frame + wm.ds_effect_length, seq1=last_sequence, seq2=new_sequence)
-            if effect_type == 'WIPE':
-                new_effect_sequence.transition_type = effect_item.wipe_type
-                new_effect_sequence.direction = effect_item.direction
-                new_effect_sequence.blur_width = effect_item.blur
-                new_effect_sequence.angle = effect_item.angle
+            add_new_effect(effect_index, effect_channel, seq_start_frame, seq_start_frame + wm.ds_effect_length, last_sequence, new_sequence)
         
         sequence_index = sequence_index+1
         effect_index = effect_index+1
@@ -641,8 +642,45 @@ class ManualAddEffectsTypeOperator(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
     
     def execute(self, context):
-        # TODO
+        sequence_list = []
+        effect_channel = 1
+        effect_index = 0
+        seq1 = None
+        for sequ in context.scene.sequence_editor.sequences:
+            if sequ.select ==True and (sequ.type == 'IMAGE' or sequ.type == 'META' or sequ.type == 'SCENE' or sequ.type == 'MOVIE' or sequ.type == 'MOVIECLIP'):
+                if effect_channel <= sequ.channel:
+                   effect_channel =  sequ.channel + 1
+                sequence_list.append(sequ)
         
+        print('')
+        print('')
+        for s in sequence_list:
+            print(s.name)
+            print(s.frame_final_start)
+        sequence_list.sort(key=lambda sequ: sequ.frame_final_start)
+        print('')
+        print('')
+        for s in sequence_list:
+            print(s.name)
+            print(s.frame_final_start)
+            print(s.frame_final_end)
+        print('')
+        print('')
+        
+        for s in sequence_list:
+            if seq1 != None:
+                frame_start = s.frame_final_start
+                frame_end = seq1.frame_final_end
+                if frame_start < frame_end:
+                    add_new_effect(effect_index, effect_channel, frame_start, frame_end, seq1, s)
+                
+                effect_index += 1
+            seq1 = s
+        
+        # Workaround for bug https://developer.blender.org/T43271
+        if len(sequence_list) > 0:
+            sequence_list[0].frame_final_end = sequence_list[0].frame_final_end
+            
         return {'FINISHED'}
 
 ################ UI code
