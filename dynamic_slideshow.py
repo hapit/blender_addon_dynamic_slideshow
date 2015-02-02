@@ -818,6 +818,8 @@ class DynamicSlideshowPanel(bpy.types.Panel):
                 col.menu("dyn_slideshow.effect_extra_menu", icon='DOWNARROW_HLT', text="")
                 if len(scene.ds_effect_types) > 0:
                     selected_effect = scene.ds_effect_types[scene.ds_effect_type_index]
+                    effect_box.separator()
+                    effect_box.prop(selected_effect, "name", text="Name")
                     effect_box.prop(selected_effect, "effect_type", text="Effect")
                     if selected_effect.effect_type == 'CROSS':
                         effect_box.prop(selected_effect, "cross_type", text="Type")
