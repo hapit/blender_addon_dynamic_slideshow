@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Dynamic Slideshow",
     "author": "Philipp (Hapit) Hemmer",
-    "version": (0, 5, 99),
+    "version": (0, 6),
     "blender": (2, 72, 0),
     "location": "View3D > Tool shelf > Slideshow (Tab)",
     "description": "Addon for creating dynamic slideshows. Inspired by a CG Cookie Tutorial, this addon creates cameras and sequences for a slideshow. It uses the 'images as planes' addon for adding pictures.",
