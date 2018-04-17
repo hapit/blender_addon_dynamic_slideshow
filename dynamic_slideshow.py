@@ -1,8 +1,8 @@
 bl_info = {
     "name": "Dynamic Slideshow",
     "author": "Philipp (Hapit) Hemmer",
-    "version": (0, 6),
-    "blender": (2, 72, 0),
+    "version": (0, 7),
+    "blender": (2, 79, 0),
     "location": "View3D > Tool shelf > Slideshow (Tab)",
     "description": "Addon for creating dynamic slideshows. Inspired by a CG Cookie Tutorial, this addon creates cameras and sequences for a slideshow. It uses the 'images as planes' addon for adding pictures.",
     #"warning": "",
@@ -189,28 +189,6 @@ def compair_version_arrays(vArr1, vArr2):
         return -1
     return 0
 
-def compair_against_online_version():
-    # check_version against online version file
-    # check_version returns True if addon version is equal or higher than the online version
-    try:
-        latestversion = urllib.request.urlopen('https://raw.githubusercontent.com/hapit/blender_addon_dynamic_slideshow/master/version.txt')
-        latestversion = latestversion.readline()
-        latestversion = latestversion.decode("utf-8")
-        
-        latestversionStrArray = latestversion.split('.')
-        latestversionArray = []
-        for str in latestversionStrArray:
-            latestversionArray.append(int(str))
-        
-        return compair_version_arrays(bl_info['version'], latestversionArray)
-    except BaseException as e:
-        print('except' + str(e))
-        return 0
-
-def check_version(operator):
-    if compair_against_online_version() < 0:
-        operator.report({'INFO'}, bl_info['name'] + ' - Newer version available!')
-
 def get_effect_type(index):
     # retruns EffectCollection item
     scene = bpy.context.scene
@@ -258,7 +236,6 @@ class InitSceneOperator(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
     
     def execute(self, context):
-        check_version(self)
         bpy.context.scene.cursor_location = (0.0, 0.0, 0.0)
         bpy.context.scene.render.engine = 'BLENDER_RENDER'
         
@@ -268,12 +245,10 @@ class InitSceneOperator(bpy.types.Operator):
         bpy.ops.view3d.viewnumpad(type='TOP', align_active=False)
         
         # N-Panel Screen Preview/Render
-        bpy.context.scene.render.use_sequencer_gl_preview = True
         bpy.context.scene.render.sequencer_gl_preview = 'SOLID'
         bpy.context.scene.render.use_sequencer_gl_textured_solid = True
         
         return {'FINISHED'}
-
 
 class AddCameraOperator(bpy.types.Operator):
     """Add Camera"""
@@ -283,7 +258,6 @@ class AddCameraOperator(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
     
     def execute(self, context):
-        check_version(self)
         wm = context.window_manager
         
         bpy.ops.object.camera_add(location=(0,0,2),rotation=(0,0,0))
@@ -305,7 +279,6 @@ class AddCameraOperator(bpy.types.Operator):
         return is_camera_count_zero()
 
 def execute_init_cameras(self, context):
-    check_version(self)
     cameraCount = 0
     cameraObj = None
     for obj in bpy.context.scene.objects:
@@ -369,9 +342,7 @@ def execute_init_cameras(self, context):
     
     return True
 
-
 def execute_init_sequences(self, context):
-    check_version(self)
     wm = context.window_manager
     
     scene_sequence_name = 'scene'
@@ -677,10 +648,6 @@ class ManualAddEffectsTypeOperator(bpy.types.Operator):
                 effect_index += 1
             seq1 = s
         
-        # Workaround for bug https://developer.blender.org/T43271
-        if len(sequence_list) > 0:
-            sequence_list[0].frame_final_end = sequence_list[0].frame_final_end
-            
         return {'FINISHED'}
 
 ################ UI code
