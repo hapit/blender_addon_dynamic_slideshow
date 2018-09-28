@@ -76,12 +76,6 @@ def get_sorted_scene_cameras_list():
     scene_cameras.sort(key=lambda cam: cam.location.x+cam.delta_location.x)
     return scene_cameras
 
-def is_camera_count_zero():
-    for obj in bpy.context.scene.objects:
-        if obj.type == 'CAMERA':
-            return False
-    return True
-
 def has_multiple_cameras():
     cam_count = 0
     for obj in bpy.context.scene.objects:
@@ -159,36 +153,6 @@ def set_sequence_active_for_camera(camera):
             if area.type == 'SEQUENCE_EDITOR':
                 area.tag_redraw()
 
-def compair_version_arrays(vArr1, vArr2):
-    # return -1 if vArr1 is smaller than vArr2
-    # return 0 if both arrays are equal
-    # return 1 if vArr1 is greater than vArr2
-    if len(vArr1) < 2 or len(vArr2) < 2:
-        print('Error in compair_version_arrays')
-        return 0 # error should not happen
-    if vArr1[0] < vArr2[0]:
-        return -1
-    elif vArr1[0] > vArr2[0]:
-        return 1
-    # first version number is equal
-    if vArr1[1] < vArr2[1]:
-        return -1
-    elif vArr1[1] > vArr2[1]:
-        return 1
-    # second version number is equal, check vor third version number
-    if len(vArr1) > 2 and len(vArr2) > 2:
-        if vArr1[2] < vArr2[2]:
-            return -1
-        elif vArr1[2] > vArr2[2]:
-            return 1
-        else:
-            return 0
-    elif len(vArr1) > 2 and len(vArr2) <= 2:
-        return 1
-    elif len(vArr1) <= 2 and len(vArr2) > 2:
-        return -1
-    return 0
-
 def get_effect_type(index):
     # retruns EffectCollection item
     scene = bpy.context.scene
@@ -243,40 +207,19 @@ class InitSceneOperator(bpy.types.Operator):
         bpy.context.scene.game_settings.material_mode = 'GLSL'
         bpy.context.space_data.show_textured_solid = True
         bpy.ops.view3d.viewnumpad(type='TOP', align_active=False)
+
+        # clean scene, remove everything
+        bpy.ops.object.select_all(action='SELECT')
+        bpy.ops.object.delete() 
         
         # N-Panel Screen Preview/Render
         bpy.context.scene.render.sequencer_gl_preview = 'SOLID'
         bpy.context.scene.render.use_sequencer_gl_textured_solid = True
         
-        return {'FINISHED'}
-
-class AddCameraOperator(bpy.types.Operator):
-    """Add Camera"""
-    
-    bl_idname = "dyn_slideshow.add_cameras"
-    bl_label = "Add Camera"
-    bl_options = {'REGISTER', 'UNDO'}
-    
-    def execute(self, context):
-        wm = context.window_manager
-        
         bpy.ops.object.camera_add(location=(0,0,2),rotation=(0,0,0))
-        
-        if is_draw_type_handling():
-            for mesh_obj in bpy.context.scene.objects:
-                if mesh_obj.type == 'MESH':
-                    for mat_slot in mesh_obj.material_slots:
-                        mat_slot.material.use_shadeless = True
-                    mesh_obj.draw_type = 'WIRE'
-                    if mesh_obj.location == Vector((0.0, 0.0, 0.0)):
-                        mesh_obj.draw_type = 'SOLID'
         
         bpy.context.space_data.viewport_shade = 'SOLID'
         return {'FINISHED'}
-    
-    @classmethod
-    def poll(cls, context):
-        return is_camera_count_zero()
 
 def execute_init_cameras(self, context):
     cameraCount = 0
@@ -412,6 +355,16 @@ class SetupSlideshowOperator(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
     
     def execute(self, context):
+        # set shadeless and wire
+        if is_draw_type_handling():
+            for mesh_obj in bpy.context.scene.objects:
+                if mesh_obj.type == 'MESH':
+                    for mat_slot in mesh_obj.material_slots:
+                        mat_slot.material.use_shadeless = True
+                    mesh_obj.draw_type = 'WIRE'
+                    if mesh_obj.location == Vector((0.0, 0.0, 0.0)):
+                        mesh_obj.draw_type = 'SOLID'
+
         if not has_multiple_cameras():
             result1 = execute_init_cameras(self, context)
         else:
@@ -747,9 +700,7 @@ class DynamicSlideshowPanel(bpy.types.Panel):
             layout.operator('import_image.to_plane', ' Images as Planes', icon='TEXTURE')
         else:
             layout.label("Activate 'Images as Planes'")
-        
-        layout.operator(AddCameraOperator.bl_idname, 'Add camera')
-        
+                
         layout.separator()
         
         box = layout.box()
